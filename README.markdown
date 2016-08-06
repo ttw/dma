@@ -11,25 +11,14 @@ dma is not intended as a replacement for real, big MTAs like sendmail(8)
 or postfix(1).  Consequently, dma does not listen on port 25 for
 incoming connections.
 
-
-Building
---------
-
-In Linux:
-
-	make
-
-In BSD:
-
-	cd bsd && make
-
 Installation
 ------------
 
-	make install sendmail-link mailq-link install-spool-dirs install-etc
+	make install
 
-See INSTALL for requirements and configuration options.
+See [README.install] for requirements and configuration options.
 
+[README.install]: file://README.install More detailed configuration, build and install information
 
 Contact
 -------

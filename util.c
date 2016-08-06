@@ -49,73 +49,6 @@
 
 #include "dma.h"
 
-const char *
-hostname(void)
-{
-#ifndef HOST_NAME_MAX
-#define HOST_NAME_MAX	255
-#endif
-	static char name[HOST_NAME_MAX+1];
-	static int initialized = 0;
-	char *s;
-
-	if (initialized)
-		return (name);
-
-	if (config.mailname == NULL || !*config.mailname)
-		goto local;
-
-	if (config.mailname[0] == '/') {
-		/*
-		 * If the mailname looks like an absolute path,
-		 * treat it as a file.
-		 */
-		FILE *fp;
-
-		fp = fopen(config.mailname, "r");
-		if (fp == NULL)
-			goto local;
-
-		s = fgets(name, sizeof(name), fp);
-		fclose(fp);
-		if (s == NULL)
-			goto local;
-
-		for (s = name; *s != 0 && (isalnum(*s) || strchr("_.-", *s)); ++s)
-			/* NOTHING */;
-		*s = 0;
-
-		if (!*name)
-			goto local;
-
-		initialized = 1;
-		return (name);
-	} else {
-		snprintf(name, sizeof(name), "%s", config.mailname);
-		initialized = 1;
-		return (name);
-	}
-
-local:
-	if (gethostname(name, sizeof(name)) != 0)
-		*name = 0;
-	/*
-	 * gethostname() is allowed to truncate name without NUL-termination
-	 * and at the same time not return an error.
-	 */
-	name[sizeof(name) - 1] = 0;
-
-	for (s = name; *s != 0 && (isalnum(*s) || strchr("_.-", *s)); ++s)
-		/* NOTHING */;
-	*s = 0;
-
-	if (!*name)
-		snprintf(name, sizeof(name), "unknown-hostname");
-
-	initialized = 1;
-	return (name);
-}
-
 void
 setlogident(const char *fmt, ...)
 {
@@ -287,7 +220,6 @@ open_locked(const char *fname, int flags, ...)
 		va_end(ap);
 	}
 
-#ifndef O_EXLOCK
 	int fd, save_errno;
 
 	fd = open(fname, flags, mode);
@@ -300,9 +232,6 @@ open_locked(const char *fname, int flags, ...)
 		return(-1);
 	}
 	return(fd);
-#else
-	return(open(fname, flags|O_EXLOCK, mode));
-#endif
 }
 
 char *
@@ -344,3 +273,8 @@ init_random(void)
 	if (rf != -1)
 		close(rf);
 }
+
+/*[TODO;
+[ ] don't like "misc" don't like "util"; evaluate these functions
+[x] move 'hostname' to 'conf.c'
+]*/

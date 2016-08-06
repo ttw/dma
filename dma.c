@@ -163,7 +163,7 @@ do_alias(struct queue *queue, const char *addr)
                 if (strcmp(al->alias, addr) != 0)
                         continue;
 		SLIST_FOREACH(sit, &al->dests, next) {
-			if (add_recp(queue, sit->str, EXPAND_ADDR) != 0)
+			if (add_recp(queue, sit->str, ADD_RECP_EXPAND) != 0)
 				return (-1);
 		}
 		aliased = 1;
@@ -212,7 +212,7 @@ add_recp(struct queue *queue, const char *str, int expand)
 		it->remote = 0;
 		if (expand) {
 			aliased = do_alias(queue, it->addr);
-			if (!aliased && expand == EXPAND_WILDCARD)
+			if (!aliased && expand == ADDR_EXPAND_WILDCARD)
 				aliased = do_alias(queue, "*");
 			if (aliased < 0)
 				return (-1);
@@ -428,18 +428,14 @@ main(int argc, char **argv)
 
 	set_username();
 
-	/*
-	 * We never run as root.  If called by root, drop permissions
-	 * to the mail user.
-	 */
 	if (geteuid() == 0 || getuid() == 0) {
 		struct passwd *pw;
 
 		errno = 0;
-		pw = getpwnam(DMA_ROOT_USER);
+		pw = getpwnam(DMA_USER);
 		if (pw == NULL) {
 			if (errno == 0)
-				errx(EX_CONFIG, "user '%s' not found", DMA_ROOT_USER);
+				errx(EX_CONFIG, "user '%s' not found", DMA_USER);
 			else
 				err(EX_OSERR, "cannot drop root privileges");
 		}
@@ -572,7 +568,7 @@ skipopts:
 	if (sigaction(SIGHUP, &act, NULL) != 0)
 		syslog(LOG_WARNING, "can not set signal handler: %m");
 
-	parse_conf(CONF_PATH "/dma.conf");
+	parse_conf(DMA_CONF_PATH);
 
 	if (config.authpath != NULL)
 		parse_authfile(config.authpath);
@@ -604,7 +600,7 @@ skipopts:
 	setlogident("%s", queue.id);
 
 	for (i = 0; i < argc; i++) {
-		if (add_recp(&queue, argv[i], EXPAND_WILDCARD) != 0)
+		if (add_recp(&queue, argv[i], ADD_RECP_EXPAND_WILDCARD) != 0)
 			errlogx(EX_DATAERR, "invalid recipient `%s'", argv[i]);
 	}
 
@@ -630,3 +626,7 @@ skipopts:
 	/* NOTREACHED */
 	return (0);
 }
+
+/*[TODO;
+[x] redefine CONF_PATH to DMA_CONF_PATH
+]*/

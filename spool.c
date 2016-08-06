@@ -206,7 +206,7 @@ malformed:
 		goto out;
 	}
 
-	if (add_recp(&itmqueue, addr, 0) != 0)
+	if (add_recp(&itmqueue, addr, ADD_RECP_NO_EXPAND) != 0)
 		goto out;
 
 	it = LIST_FIRST(&itmqueue.queue);

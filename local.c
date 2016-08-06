@@ -80,8 +80,8 @@ create_mbox(const char *name)
 		for (i = 3; i <= maxfd; ++i)
 			close(i);
 
-		execl(LIBEXEC_PATH "/dma-mbox-create", "dma-mbox-create", name, NULL);
-		syslog(LOG_ERR, "cannot execute "LIBEXEC_PATH"/dma-mbox-create: %m");
+		execl(DMA_EXEC_MBOX_CREATE_PATH, DMA_BIN_MBOX_CREATE, name, NULL);
+		syslog(LOG_ERR, "cannot execute "DMA_EXEC_MBOX_CREATE_PATH": %m");
 		exit(EX_SOFTWARE);
 
 	default:
@@ -150,6 +150,7 @@ retry:
 	/* don't use O_CREAT here, because we might be running as the wrong user. */
 	mbox = open_locked(fn, O_WRONLY|O_APPEND);
 	if (mbox < 0) {
+
 		int e = errno;
 
 		do_timeout(0, 0);
@@ -220,9 +221,6 @@ retry:
 		 * - escape lines that start with "From " with a > sign.
 		 * - be reversable by escaping lines that contain an arbitrary
 		 *   number of > signs, followed by "From ", i.e. />*From / in regexp.
-		 * - strict mbox processing only requires escaping after empty lines,
-		 *   yet most MUAs seem to relax this requirement and will treat any
-		 *   line starting with "From " as the beginning of a new mail.
 		 */
 		if ((!MBOX_STRICT || hadnl) &&
 		    strncmp(&line[strspn(line, ">")], "From ", 5) == 0) {
@@ -252,3 +250,7 @@ out:
 	close(mbox);
 	return (error);
 }
+
+/*[TODO;
+[x] unify the definitions of DMA_EXEC_MBOX_CREATE_PATH (with DMA_BIN_MBOX_CREATE)
+]*/

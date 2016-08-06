@@ -26,3 +26,14 @@ If you have all of these tools installed, set the CC, YACC, INSTALL, LEX and SH 
 
 Example:
     make CC=gcc YACC=bison LEX=/usr/bin/flex SH=/bin/bash INSTALL=/usr/bin/install
+
+BUILD DESIGN
+============
+
+`dma` does not use a configuration infrastructure for building (e.g. autoconf).  Largely because it is not required but also out of principle.  Design principle here is to use a simple heirarchy of Makefiles.  All definitions will be in the main [Makefile] which will then patch and call itself.
+
+[Makefile] is structured specifically to make patches most discernable; firstly everything is one definition per line.  Definitions are grouped by block (sequential lines broken by empty lines).  These blocks are sorted alphabetically.  These conventions should be maintained.
+
+[Makefile]: Makefile The master makefile
+
+The top-level [Makefile] does nothing but call MAKE (recursively) with either [Makefile.GNU] or [Makefile.BSD].

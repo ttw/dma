@@ -58,7 +58,18 @@
 
 #include "dma.h"
 
+/* global definitions */
 char neterr[ERRMSG_SIZE];
+
+/* crypto.c defines */
+int smtp_auth_md5(int, char *, char *);
+int smtp_init_crypto(int, int);
+
+/* base64.c defines */
+int base64_encode(const void *, int, char **);
+
+/* dns.c defines */
+int dns_get_mx_list(const char *, int, struct mx_hostentry **, int);
 
 char *
 ssl_errstr(void)
@@ -548,3 +559,7 @@ out:
 
 	return (error);
 }
+
+/*[TODO;
+[x] start sanitizing some of the 'dma.h' definition blob
+]*/

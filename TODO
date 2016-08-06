@@ -1,4 +1,14 @@
-- unquote/handle quoted local recipients
-- handle/use ESMTP extensions
-- .forward support
-- suggest way to run a queue flush on boot
+[ ] 2009-08-28
+		unquote/handle quoted local recipients
+
+[ ] 2009-08-28
+		handle/use ESMTP extensions
+
+[ ] 2009-08-28
+		.forward support
+
+[ ] 2010-10-29
+		suggest way to run a queue flush on boot
+
+[ ] 2016-08-04
+	swap 'err/errx/et.al' for 'msg' handler

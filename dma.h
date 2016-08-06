@@ -55,9 +55,6 @@
 #define MAX_RETRY	(3*60*60)	/* retry at least every 3 hours */
 #define MAX_TIMEOUT	(5*24*60*60)	/* give up after 5 days */
 #define SLEEP_TIMEOUT	30		/* check for queue flush every 30 seconds */
-#ifndef PATH_MAX
-#define PATH_MAX	1024		/* Max path len */
-#endif
 #define RFC2822_LINE_MAX	1000		/* Max email line length, per RFC2822 */
 #define DMA_LINE_MAX	65536		/* Max email line length, internal */
 #define	SMTP_PORT	25		/* Default SMTP port */
@@ -72,27 +69,7 @@
 #define TLS_OPP		0x080		/* Opportunistic STARTTLS */
 #define NULLCLIENT	0x100		/* Nullclient support */
 
-#ifndef CONF_PATH
-#error Please define CONF_PATH
-#endif
-
-#ifndef LIBEXEC_PATH
-#error Please define LIBEXEC_PATH
-#endif
-
 #define SPOOL_FLUSHFILE	"flush"
-
-#ifndef DMA_ROOT_USER
-#define DMA_ROOT_USER	"mail"
-#endif
-#ifndef DMA_GROUP
-#define DMA_GROUP	"mail"
-#endif
-
-#ifndef MBOX_STRICT
-#define MBOX_STRICT	0
-#endif
-
 
 struct stritem {
 	SLIST_ENTRY(stritem) next;
@@ -205,9 +182,10 @@ int base64_encode(const void *, int, char **);
 int base64_decode(const char *, void *);
 
 /* dma.c */
-#define EXPAND_ADDR	1
-#define EXPAND_WILDCARD	2
 int add_recp(struct queue *, const char *, int);
+#define ADD_RECP_NO_EXPAND 0
+#define ADD_RECP_EXPAND 1
+#define ADD_RECP_EXPAND_WILDCARD 2
 void run_queue(struct queue *);
 
 /* spool.c */
@@ -241,3 +219,12 @@ int strprefixcmp(const char *, const char *);
 void init_random(void);
 
 #endif
+
+/*[TODO;
+[x] move features and settings into the build infrastructure (actually, just don't redefine it
+[x] move OS definitions to 'os.h'
+[x] rename the 'add_recp' defines to be as dumb as they are
+[x] remove redundant 'ifndef' (CONF_PATH, LIBEXEC_PATH)
+[x] remove pointless fallbacks (DMA_ROOT_USER, DMA_GROUP)
+[x] change MBOX_STRICT to a build feature
+]*/

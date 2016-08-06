@@ -1,111 +1,120 @@
-#
-# Depending on your operating system, you might want to influence
-# the conditional inclusion of some helper functions:
-#
-# Define HAVE_* (in caps) if your system already provides:
-#   reallocf
-#   strlcpy
-#   getprogname
-#
+# See README.install
 
-SH?=		sh
+DMA_VERSION_MAJOR=0
+DMA_VERSION_MINOR=11
+DMA_VERSION=v$(DMA_VERSION_MAJOR).$(DMA_VERSION_MINOR)
 
-version=	$(shell ${SH} get-version.sh)
-debversion=	$(shell ${SH} get-version.sh | sed -Ee 's/^v//;s/[.]([[:digit:]]+)[.](g[[:xdigit:]]+)$$/+\1+\2/')
+PREFIX?=/usr/local
 
-CC?=		gcc
-CFLAGS?=	-O -pipe
-LDADD?=		-lssl -lcrypto -lresolv
+ETC_DIR?=$(PREFIX)/etc
+LIBEXEC_DIR?=$(PREFIX)/libexec
+SBIN_DIR?=$(PREFIX)/sbin
+SHARE_DIR?=$(PREFIX)/share
+VAR_DIR?=$(PREFIX)/var
 
-CFLAGS+=	-Wall -DDMA_VERSION='"${version}"' -DLIBEXEC_PATH='"${LIBEXEC}"' -DCONF_PATH='"${CONFDIR}"'
+MAIL_DIR?=$(VAR_DIR)/mail
+MAN_DIR?=$(SHARE_DIR)/man
+SPOOL_DIR?=$(VAR_DIR)/spool
 
-INSTALL?=	install -p
-CHGRP?=		chgrp
-CHMOD?=		chmod
+DMA_BIN=dma
+DMA_BIN_MBOX_CREATE=dma-mbox-create
+DMA_CONF_DIR=$(ETC_DIR)/dma
+DMA_CONF_FILE=dma.conf
+DMA_GROUP=mail
+DMA_MAN=dma.8
+DMA_SPOOL_DIR=$(SPOOL_DIR)/dma
+DMA_USER=mail	# We never run as root.  If called by root, drop permissions to the mail user.
 
-PREFIX?=	/usr/local
-SBIN?=		${PREFIX}/sbin
-LIBEXEC?=	${PREFIX}/lib
-CONFDIR?=	/etc/dma
-MAN?=		${PREFIX}/share/man
-VAR?=		/var
-DMASPOOL?=	${VAR}/spool/dma
-VARMAIL?=	${VAR}/mail
-SYMLINK?=	-s # or empty to create hard link
+DMA_FEATURE_MBOX_STRICT?=0 # strict mbox processing only requires escaping after empty lines, yet most MUAs seem to relax this requirement and will treat any line starting with "From " as the beginning of a new mail.
 
-YACC?=		yacc
-LEX?=		lex
-LN?=		ln
+SRCS+=aliases_parse.y
+SRCS+=aliases_scan.l
+SRCS+=base64.c
+SRCS+=conf.c
+SRCS+=crypto.c
+SRCS+=dma-mbox-create.c
+SRCS+=dma.c
+SRCS+=dns.c
+SRCS+=local.c
+SRCS+=mail.c
+SRCS+=net.c
+SRCS+=spool.c
+SRCS+=util.c
 
-OBJS=	aliases_parse.o aliases_scan.o base64.o conf.o crypto.o
-OBJS+=	dma.o dns.o local.o mail.o net.o spool.o util.o
-OBJS+=	dfcompat.o
+OBJS+=aliases_parse.o
+OBJS+=aliases_scan.o
+OBJS+=base64.o
+OBJS+=conf.o
+OBJS+=crypto.o
+OBJS+=dfcompat.o
+OBJS+=dma.o
+OBJS+=dns.o
+OBJS+=local.o
+OBJS+=mail.o
+OBJS+=net.o
+OBJS+=spool.o
+OBJS+=util.o
 
-all: dma dma-mbox-create
+# PROGRAM DEFINITIONS
+
+CC?=cc
+CHGRP?=chgrp
+CHMOD?=chmod
+INSTALL?=install
+LEX?=lex
+LN?=ln
+PAGER?=less
+YACC?=yacc
+
+INSTALL_OWN=root
+INSTALL_GRP=mail
+INSTALL_MODE=2555
+INSTALL_SHARE_OWN=root
+INSTALL_SHARE_GRP=wheel
+INSTALL_SHARE_MODE=755
+
+# COMPILATION AND LINKING DEFINITIONS
+
+CFLAGS_DEFINE_FEATURE+=-DHAVE_REALLOCF
+CFLAGS_DEFINE_FEATURE+=-DHAVE_STRLCPY
+CFLAGS_DEFINE_FEATURE+=-DHAVE_GETPROGNAME
+CFLAGS_DEFINE_FEATURE+=-DHAVE_SYSCONF
+
+CFLAGS_DEFINE_DMA+=-DDMA_VERSION='"$(DMA_VERSION)"'
+CFLAGS_DEFINE_DMA+=-DDMA_EXEC_MBOX_CREATE_PATH='"$(LIBEXEC_DIR)/$(DMA_BIN_MBOX_CREATE)"'
+CFLAGS_DEFINE_DMA+=-DDMA_CONF_PATH='"$(SYSCONF_DIR)/$(DMA_CONF_FILE)"'
+
+CFLAGS?=-O -pipe -Wall
+
+LDFLAGS+=-lssl
+#LDFLAGS+=-lcrypto
+#LDFLAGS+=-lresolv
+
+help:
+	$(PAGER) README.install
+
+features:
+	@sed -e '/^DMA_FEATURE_/ ! d' $(MAKEFILE) $(MAKEFILE_LIST)
 
 clean:
-	-rm -f .depend dma dma-mbox-create *.[do]
-	-rm -f aliases_parse.[ch] aliases_scan.c
+	rm $(OBJ) 
 
-install: all
-	${INSTALL} -d ${DESTDIR}${SBIN}
-	${INSTALL} -d ${DESTDIR}${MAN}/man8 ${DESTDIR}${LIBEXEC}
-	${INSTALL} -m 2755 -o root -g mail dma ${DESTDIR}${SBIN}
-	${INSTALL} -m 4754 -o root -g mail dma-mbox-create ${DESTDIR}${LIBEXEC}
-	${INSTALL} -m 0644 dma.8 ${DESTDIR}${MAN}/man8/
+build:
 
-sendmail-link:
-	cd ${DESTDIR}${SBIN} && ${LN} ${SYMLINK} dma sendmail
+install:
 
-mailq-link:
-	cd ${DESTDIR}${SBIN} && ${LN} ${SYMLINK} dma mailq
+dma:
+	cc $(CFLAGS) $(CFLAGS_DEFINE_DMA)
 
-install-spool-dirs:
-	${INSTALL} -d -m 2775 -o root -g mail ${DESTDIR}${DMASPOOL}
-	${INSTALL} -d -m 2775 -o root -g mail ${DESTDIR}${VARMAIL}
+# NOTES
+#	* Not sure whether I want to have a bare `make` do a 'build' or 'help'.  Will leave it 'help' for now.
+#	- This could as easily (or probably more easily) be a shell script but we'll keep with the tradition of a straight `make clean`, `make install` doing what you'd expect.
+#	~ Ideally makefile will be able to determine the operating system and the appropriate `make` type and then call the appropriate `make` with the necessary operating system parameters.
 
-permissions:
-	-${CHGRP} mail ${DESTDIR}${VARMAIL}/*
-	-${CHMOD} g+w ${DESTDIR}${VARMAIL}/*
-	-${CHMOD} 660 ${DESTDIR}${DMASPOOL}/flush
-
-install-etc:
-	${INSTALL} -d ${DESTDIR}${CONFDIR}
-	@if [ -e ${DESTDIR}${CONFDIR}/dma.conf ]; then \
-		echo "Not overwriting ${DESTDIR}${CONFDIR}/dma.conf."; \
-	else \
-		echo ${INSTALL} -m 644 -o root -g mail dma.conf ${DESTDIR}${CONFDIR}; \
-		${INSTALL} -m 644 -o root -g mail dma.conf ${DESTDIR}${CONFDIR}; \
-	fi
-	@if [ -e ${DESTDIR}${CONFDIR}/auth.conf ]; then \
-		echo "Not overwriting ${DESTDIR}${CONFDIR}/auth.conf."; \
-	else \
-		echo ${INSTALL} -m 640 -o root -g mail auth.conf ${DESTDIR}${CONFDIR}; \
-		${INSTALL} -m 640 -o root -g mail auth.conf ${DESTDIR}${CONFDIR}; \
-	fi
-
-aliases_parse.c: aliases_parse.y
-	${YACC} -d -o aliases_parse.c aliases_parse.y
-
-aliases_scan.c: aliases_scan.l
-	${LEX} -t aliases_scan.l > aliases_scan.c
-
-.SUFFIXES: .c .o
-
-.c.o:
-	${CC} ${CFLAGS} ${CPPFLAGS} -include dfcompat.h -o $@ -c $<
-
-dma: ${OBJS}
-	${CC} ${LDFLAGS} -o $@ ${OBJS} ${LDADD}
-
-
-dch:
-	dch --release-heuristic changelog -v ${debversion}
-
-
-ppa:
-	@if [ -z '${DEB_DIST}' ]; then echo "please set DEB_DIST to build"; exit 1; fi
-	dch -v "${debversion}~${DEB_DIST}" -D ${DEB_DIST} "${DEB_DIST} build" -b
-	debuild -S -sa
-	ver=$$(dpkg-parsechangelog -n1 | awk '$$1 == "Version:" { print $$2 }'); \
-	dput ppa:corecode/dma ../dma_$${ver}_source.changes
+# TASK#build
+#Wed Aug  3 22:14:56 UTC 2016
+#		SPOOLDIR_FLUSHFILE needs to match the defines
+#Wed Aug  3 17:04:18 UTC 2016
+#		determine make and HAVE parameters for any one OS
+#Wed Aug  3 17:07:24 UTC 2016
+#		distill top level definitions

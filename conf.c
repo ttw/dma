@@ -243,3 +243,94 @@ parse_conf(const char *config_path)
 
 	fclose(conf);
 }
+
+const char*
+mailname()
+{
+/*[MAN;
+.Ss mailname
+Return the what we consider to be the correct hostname of the system.  This caches its result and returns the same result after that.
+]*/
+			/*[TODO;mailname;
+			[ ] refactor conditionals to 'os.h'
+			[?] should probably be smarter than just 'gethostname'
+				[ ] gethostname > ip address > reverse lookup
+			[?] should probably do more checks
+				[ ] check TLD hostname (i.e. three parts)
+				[ ] getdomainname if not TLD hostname
+			[?] mailname check should be part of 'ietf.c'
+			[?] should remove 'mailname' from 'err/errx'; redundant restatement of function name (even though it's conceptually the variable name)
+			[x] correct sanity check (no '_' in hostnames)
+			]*/
+
+	static char *mailname = NULL ;
+
+	int len ;	/* length of mailname */
+	char *cp ;	/* generic char pointer */
+	int ret ;	/* generic return value */
+
+/* if we've already produced a 'mailname', reuse it */
+	if (str_n(mailname))
+		return (mailname);
+/* ... otherwise, we figure it out. */
+
+/* allocate some memory for 'mailname' */
+	len = dma_host_name_max() + 1 ;	/* allow for terminating '\0' */
+	if (mailname == NULL)
+		mailname = (char*)calloc((size_t)len, sizeof(char)) ;	/* include enough for a '\0' terminator */
+					/* XXX: will never be free'd (but we're OK with that) */
+	if (mailname == NULL)
+		err( EXIT_FAILURE, "libc/%s/calloc?mailname", __func__ ) ;
+
+/* prefer the 'config.mailname' configuration ... */
+	if (str_n(config.mailname))
+	{
+		len = snprintf(mailname, len, "%s", config.mailname) ;
+					/* ... and crop '\0' from 'len' */
+		if( len < 0 )
+			errx( EX_SOFTWARE,
+					"libc/%s/snprintf?mailname+len=%d",
+					__func__,
+					len ) ;
+	}
+/* ... and fallback to 'gethostname' */
+	else
+	{
+		ret = gethostname(mailname, len) ;
+		if( ret < 0 )
+			err( EXIT_FAILURE, "libc/%s/gethostname?mailname", __func__ ) ;
+		if( mailname[len] != '\0' )
+			errx( EX_SOFTWARE,
+					"libc/%s/gethostname/cropped?mailname+len=%d",
+					__func__,
+					len ) ;	/* this shouldn't really be possible but 'gethostname' can crop */
+	/* find end of 'mailname' */
+		while( mailname[len] == '\0' )
+			if( --len < 0 )
+				errx( EX_SOFTWARE,
+					"dma/%s/gethostname?mailname=%s",
+					__func__,
+					mailname ) ;
+	} ;
+/* sanity check that mailname chars are 'isalnum' or '-' or '.' ... */
+			/*[TODO] need to account for 'locale' (or set it explicitly) */
+	for( /*len*/ ; len >= 0 ; len-- )
+	{
+		if(!isalnum(mailname[len])) break ;
+		if(!strchr("-.",mailname[len])) break ;
+	} ;
+/* ... and as long as we didn't break before start, we're good ... */
+	if( len < 0 )
+		return (mailname);
+/* ... otherwise, we're broke */
+	errx( EX_SOFTWARE, "dma/%s?mailname=%s", __func__, mailname ) ;
+} ;
+
+/*[TODO;conf.c;
+[ ] refactor to remove 'mailname' and use the 'config' option.
+[x] remove "mailname from first line of file" feature (pointless).
+[x] import 'hostname' from 'util.c'
+[x] rename 'hostname' to 'mailname' (match config option of same)
+[x] use 'sysconf' for host name max
+[x] don't fallback to some "unknown-hostname"
+]*/
