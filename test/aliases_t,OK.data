@@ -1,0 +1,26 @@
+# comments
+# are fun
+	# so are comment's that start here
+root: fc0	# or comment's that go here
+		# and so are empty lines (but this isn't one)
+#root:	me@my.domain # comments and comments that might look like tokens
+
+# Basic system aliases -- these MUST be present
+MAILER-DAEMON: postmaster
+postmaster: root, someone
+
+"mrbig": is, also, valid
+
+"#@:": should, "be too"
+
+msgs: "| /usr/bin/msgs -s"	# good old command stuff
+
+mamam: "| and and a command that has \"weird\" stuff #@:", in, it
+
+shaman: "| this can
+probably
+	be multi-line", also
+
+bit-bucket: /dev/null
+
+dev-null: bit-bucket
