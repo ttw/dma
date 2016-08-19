@@ -1,3 +1,4 @@
+ATTIC/*
 *.o
 dma
 dma-mbox-create
