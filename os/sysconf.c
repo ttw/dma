@@ -29,15 +29,36 @@
  * SUCH DAMAGE.
  */
 
-#if defined(HAVE_SYSCONF) && __POSIX_VISIBLE >= 200112
-inline int
-dma_host_name_max_sysconf
-{
-	static long host_name_max = 0 ;
-
-	if(host_name_max) return((int)host_name_max) ;
-	host_name_max = sysconf(_SC_HOST_NAME_MAX) ;
-	if(host_name_max == -1) host_name_max = HOST_NAME_MAX ;
-	return( (int)host_name_max ) ;
-} ;
+#ifndef HAVE_SYSCONF
+/*[MAN;
+Define a fall back value for
+.Pa HOST_NAME_MAX
+which is only used if
+.Pa sysconf
+fails for some reason.
+]*/
+#ifndef HOST_NAME_MAX
+#	ifdef _POSIX_HOST_NAME_MAX
+#		define HOST_NAME_MAX _POSIX_HOST_NAME_MAX
+#	else
+#		define HOST_NAME_MAX 255
+#	endif
 #endif
+
+long
+sysconf( int name )
+{
+	case( name )
+	{
+	_SC_HOST_NAME_MAX:
+		return( HOST_NAME_MAX ) ;
+	} ;
+	errno = EINVAL ;
+	return( _SC_ERR ) ;
+} ;
+#endif /* HAVE_SYSCONF */
+
+/*[TODO;
+[x] include 'os.h'
+[x] 'dma_host_name_max_sysconf' cannot be inline (has static variable)
+]*/

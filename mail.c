@@ -40,6 +40,7 @@
 #include <unistd.h>
 
 #include "dma.h"
+#include "conf.h"
 
 void
 bounce(struct qitem *it, const char *reason)
@@ -88,13 +89,13 @@ bounce(struct qitem *it, const char *reason)
 		"%s\n"
 		"\n",
 		bounceq.id,
-		hostname(), VERSION,
+		mailname(), VERSION,
 		rfc822date(),
 		it->addr,
 		it->sender,
-		bounceq.id, hostname(),
+		bounceq.id, mailname(),
 		rfc822date(),
-		VERSION, hostname(),
+		VERSION, mailname(),
 		it->addr,
 		reason,
 		config.features & FULLBOUNCE ?
@@ -366,7 +367,7 @@ readmail(struct queue *queue, int nodot, int recp_from_header)
 		username, useruid,
 		queue->sender,
 		queue->id,
-		hostname(), VERSION,
+		mailname(), VERSION,
 		rfc822date());
 	if ((ssize_t)error < 0)
 		return (-1);
@@ -440,7 +441,7 @@ readmail(struct queue *queue, int nodot, int recp_from_header)
 						 (uintmax_t)time(NULL),
 						 queue->id,
 						 (uintmax_t)random(),
-						 hostname());
+						 mailname());
 				} else if (!had_from) {
 					had_from = 1;
 					snprintf(line, sizeof(line), "From: <%s>\n", queue->sender);
@@ -460,3 +461,7 @@ readmail(struct queue *queue, int nodot, int recp_from_header)
 
 	return (0);
 }
+
+/*[TODO;
+[x] switch from 'hostname' to 'mailname'
+]*/

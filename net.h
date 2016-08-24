@@ -1,7 +1,10 @@
-#ifndef OS_H
-#define OS_H
 /*
- * Copyright (c) 2016, n0goOi3 <ttw@cobbled.net>.  All rights reserved.
+ * Copyright (c) 2008-2014, Simon Schubert <2@0x2c.org>.
+ * Copyright (c) 2008 The DragonFly Project.  All rights reserved.
+ *
+ * This code is derived from software contributed to The DragonFly Project
+ * by Simon Schubert <2@0x2c.org> and
+ * Matthias Schmidt <matthias@dragonflybsd.org>.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -31,74 +34,16 @@
  * SUCH DAMAGE.
  */
 
-/*[MAN;
-.Dd
-.Dt os.h A
-.Os
-.Sh os.h : Operating System specific defintions
-]*/
+#ifndef DMA_NET_H
+#define DMA_NET_H
 
-#ifndef PATH_MAX
-/*[MAN;
-.Ss PATH_MAX
+#include "dma.h"
 
-Simple configuration paths; don't need anything clever here (so ignore the XOPEN limits).
-]*/
-#	ifdef _POSIX_PATH_MAX
-#		define PATH_MAX _POSIX_PATH_MAX
-#	else
-#		define PATH_MAX 255
-#	endif
-#endif
+int
+deliver_remote( struct qitem* ) ;
 
-#ifndef HAVE_GETPROGNAME
-/*[MAN;
-.Ss getprogname
-
-Get program name.
-]*/
-const char* getprogname( void ) ;
-#endif /* !HAVE_GETPROGNAME */
-
-#ifndef HAVE_REALLOCF
-/*[MAN;
-.Ss relallocf
-
-'realloc' and free if fail.
-]*/
-void* reallocf( void*, size_t ) ;
-#endif /* !HAVE_REALLOCF */
-
-#ifndef HAVE_SETPROGNAME
-/*[MAN;
-.Ss setprogname
-
-Set program name.
-]*/
-void setprogname( const char* ) ;
-#endif /* !HAVE_SETPROGNAME */
-
-#ifndef HAVE_STRLCPY
-/*[MAN;
-.Ss strlcpy
-
-Consistent 'strcpy' function.
-]*/
-size_t strlcpy( char*, const char*, size_t ) ;
-#endif /* !HAVE_STRLCPY */
-
-#ifndef HAVE_SYSCONF
-/*[MAN;
-.Ss sysconf
-
-Get system configuration.
-]*/
-long sysconf( int );
-#endif /* !HAVE_SYSCONF */
-
-#endif /* OS_H */
+#endif /* DMA_NET_H */
 
 /*[TODO;
-[x] move prototypes for optional functions from 'dfcompat.h'
-[x] get the POSIX definitions (include cdefs.h)
+[x] break out 'net' functions to 'net.h'
 ]*/

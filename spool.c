@@ -33,8 +33,6 @@
  * SUCH DAMAGE.
  */
 
-#include "dfcompat.h"
-
 #include <sys/file.h>
 #include <sys/stat.h>
 
@@ -47,6 +45,7 @@
 #include <unistd.h>
 #include <syslog.h>
 
+#include "aliases/dma.h"
 #include "dma.h"
 
 /*

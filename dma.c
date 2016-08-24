@@ -33,8 +33,6 @@
  * SUCH DAMAGE.
  */
 
-#include "dfcompat.h"
-
 #include <sys/param.h>
 #include <sys/types.h>
 #include <sys/queue.h>
@@ -57,10 +55,16 @@
 #include <syslog.h>
 #include <unistd.h>
 
+#include "aliases/dma.h"
 #include "dma.h"
+#include "conf.h"
+#include "net.h"
 
+int yyparse( void ) ;	/* parser prototype from 'aliases/parse.c' */
 
 static void deliver(struct qitem *);
+
+FILE *yyin ;	/* parser input for 'aliases/*' */
 
 struct aliases aliases = LIST_HEAD_INITIALIZER(aliases);
 struct strlist tmpfs = SLIST_HEAD_INITIALIZER(tmpfs);
@@ -73,19 +77,7 @@ char errmsg[ERRMSG_SIZE];
 static int daemonize = 1;
 static int doqueue = 0;
 
-struct config config = {
-	.smarthost	= NULL,
-	.port		= 25,
-	.aliases	= "/etc/aliases",
-	.spooldir	= "/var/spool/dma",
-	.authpath	= NULL,
-	.certfile	= NULL,
-	.features	= 0,
-	.mailname	= NULL,
-	.masquerade_host = NULL,
-	.masquerade_user = NULL,
-};
-
+char _os_progname[PATH_MAX] = {0} ;
 
 static void
 sighup_handler(int signo)
@@ -111,7 +103,7 @@ set_from(struct queue *queue, const char *osender)
 	}
 
 	if (!strchr(addr, '@')) {
-		const char *from_host = hostname();
+		const char *from_host = mailname();
 
 		if (config.masquerade_host)
 			from_host = config.masquerade_host;
@@ -190,7 +182,7 @@ add_recp(struct queue *queue, const char *str, int expand)
 	it->sender = queue->sender;
 	host = strrchr(it->addr, '@');
 	if (host != NULL &&
-	    (strcmp(host + 1, hostname()) == 0 ||
+	    (strcmp(host + 1, mailname()) == 0 ||
 	     strcmp(host + 1, "localhost") == 0)) {
 		*host = 0;
 	}
@@ -212,7 +204,7 @@ add_recp(struct queue *queue, const char *str, int expand)
 		it->remote = 0;
 		if (expand) {
 			aliased = do_alias(queue, it->addr);
-			if (!aliased && expand == ADDR_EXPAND_WILDCARD)
+			if (!aliased && expand == ADD_RECP_EXPAND_WILDCARD)
 				aliased = do_alias(queue, "*");
 			if (aliased < 0)
 				return (-1);
@@ -425,10 +417,14 @@ main(int argc, char **argv)
 	int i, ch;
 	int nodot = 0, showq = 0, queue_only = 0;
 	int recp_from_header = 0;
+	size_t sz ;
 
-	set_username();
+	sz = strlcpy( _os_progname, getprogname(), sizeof(_os_progname) ) ;
+	if(sz == 0) setprogname(argv[0]) ;
+				/*[TODO; [ ] modify progname so we know 'sendmail' is actually 'dma' ]*/
 
 	if (geteuid() == 0 || getuid() == 0) {
+	/* drop privilage; switch to DMA_USER */
 		struct passwd *pw;
 
 		errno = 0;
@@ -628,5 +624,8 @@ skipopts:
 }
 
 /*[TODO;
-[x] redefine CONF_PATH to DMA_CONF_PATH
+[x] change paths to [Makefile] variables
+[x] correct EXPAND mis-define
+[x] switch from 'hostname' to 'mailname'
+[ ] use a standard 'conf' format and then create a library for it
 ]*/

@@ -60,29 +60,10 @@
 #define	SMTP_PORT	25		/* Default SMTP port */
 #define CON_TIMEOUT	(5*60)		/* Connection timeout per RFC5321 */
 
-#define STARTTLS	0x002		/* StartTLS support */
-#define SECURETRANS	0x004		/* SSL/TLS in general */
-#define NOSSL		0x008		/* Do not use SSL */
-#define DEFER		0x010		/* Defer mails */
-#define INSECURE	0x020		/* Allow plain login w/o encryption */
-#define FULLBOUNCE	0x040		/* Bounce the full message */
-#define TLS_OPP		0x080		/* Opportunistic STARTTLS */
-#define NULLCLIENT	0x100		/* Nullclient support */
-
 #define SPOOL_FLUSHFILE	"flush"
 
-struct stritem {
-	SLIST_ENTRY(stritem) next;
-	char *str;
-};
-SLIST_HEAD(strlist, stritem);
-
-struct alias {
-	LIST_ENTRY(alias) next;
-	char *alias;
-	struct strlist dests;
-};
-LIST_HEAD(aliases, alias);
+#define str_z(x) (x == NULL || *x == '\0')
+#define str_n(x) (!str_z(x))
 
 struct qitem {
 	LIST_ENTRY(qitem) next;
@@ -105,23 +86,6 @@ struct queue {
 	const char *sender;
 };
 
-struct config {
-	const char *smarthost;
-	int port;
-	const char *aliases;
-	const char *spooldir;
-	const char *authpath;
-	const char *certfile;
-	int features;
-	const char *mailname;
-	const char *masquerade_host;
-	const char *masquerade_user;
-
-	/* XXX does not belong into config */
-	SSL *ssl;
-};
-
-
 struct authuser {
 	SLIST_ENTRY(authuser) next;
 	char *login;
@@ -129,15 +93,6 @@ struct authuser {
 	char *host;
 };
 SLIST_HEAD(authusers, authuser);
-
-
-struct mx_hostentry {
-	char		host[MAXDNAME];
-	char		addr[INET6_ADDRSTRLEN];
-	int		pref;
-	struct addrinfo	ai;
-	struct sockaddr_storage	sa;
-};
 
 
 /* global variables */
@@ -152,30 +107,10 @@ extern const char *logident_base;
 extern char neterr[ERRMSG_SIZE];
 extern char errmsg[ERRMSG_SIZE];
 
-/* aliases_parse.y */
-int yyparse(void);
-int yywrap(void);
-int yylex(void);
-extern FILE *yyin;
-
 /* conf.c */
 void trim_line(char *);
 void parse_conf(const char *);
 void parse_authfile(const char *);
-
-/* crypto.c */
-void hmac_md5(unsigned char *, int, unsigned char *, int, unsigned char *);
-int smtp_auth_md5(int, char *, char *);
-int smtp_init_crypto(int, int);
-
-/* dns.c */
-int dns_get_mx_list(const char *, int, struct mx_hostentry **, int);
-
-/* net.c */
-char *ssl_errstr(void);
-int read_remote(int, int, char *);
-ssize_t send_remote_command(int, const char*, ...)  __attribute__((__nonnull__(2), __format__ (__printf__, 2, 3)));
-int deliver_remote(struct qitem *);
 
 /* base64.c */
 int base64_encode(const void *, int, char **);
@@ -221,10 +156,6 @@ void init_random(void);
 #endif
 
 /*[TODO;
-[x] move features and settings into the build infrastructure (actually, just don't redefine it
-[x] move OS definitions to 'os.h'
-[x] rename the 'add_recp' defines to be as dumb as they are
-[x] remove redundant 'ifndef' (CONF_PATH, LIBEXEC_PATH)
-[x] remove pointless fallbacks (DMA_ROOT_USER, DMA_GROUP)
-[x] change MBOX_STRICT to a build feature
+[ ] don't like how the header definitions are collected here; makes for simple include directives but breaks explict dependencies; prefer to be conservative and explicit with these.
+[x] define 'str' functions for empty and not empty (not sure I like my naming convetion here?)
 ]*/

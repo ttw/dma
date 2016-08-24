@@ -47,6 +47,7 @@
 #include <syslog.h>
 #include <unistd.h>
 
+#include "aliases/dma.h"
 #include "dma.h"
 
 void

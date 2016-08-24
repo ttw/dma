@@ -80,8 +80,8 @@ create_mbox(const char *name)
 		for (i = 3; i <= maxfd; ++i)
 			close(i);
 
-		execl(DMA_EXEC_MBOX_CREATE_PATH, DMA_BIN_MBOX_CREATE, name, NULL);
-		syslog(LOG_ERR, "cannot execute "DMA_EXEC_MBOX_CREATE_PATH": %m");
+		execl(MBOXCREATE_PATH, MBOXCREATE_BIN, name, NULL);
+		syslog(LOG_ERR, "cannot execute "MBOXCREATE_PATH": %m");
 		exit(EX_SOFTWARE);
 
 	default:
@@ -252,5 +252,5 @@ out:
 }
 
 /*[TODO;
-[x] unify the definitions of DMA_EXEC_MBOX_CREATE_PATH (with DMA_BIN_MBOX_CREATE)
+[x] standardize DMA_EXEC_MBOX_CREATE_PATH and DMA_BIN_MBOX_CREATE definitions
 ]*/

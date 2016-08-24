@@ -1,19 +1,22 @@
-Installing DMA:
-===============
+# INSTALLING
 
 On most systems (with a development environment installed) you should be able to compile DMA with:
-    make
 
-Once it have compiled it successfully, you can install it with:
-    make install sendmail-link mailq-link install-spool-dirs install-etc
+	make
 
-Troubleshooting:
-----------------
-On systems that do not default to a compatible "make" version, try using "gmake" or "pmake" instead of "make". Some known examples of this:
+Once it has compiled, you may install it with:
+
+	make install
+
+# TROUBLESHOOTING
+
+Systems that do not default to a compatible `make` version should try `gmake` or `pmake`. Some known culprits are
+
 * Solaris 9
 * Solaris 10
 
 Check that you have the following commands installed:
+
 * cc - gcc is known to work
 * lex - flex is known to work
 * yacc - bison is kjnown to work
@@ -25,14 +28,16 @@ Check that you have the following commands installed:
 If you have all of these tools installed, set the CC, YACC, INSTALL, LEX and SH variable to point to the relevant location and command.
 
 Example:
+
     make CC=gcc YACC=bison LEX=/usr/bin/flex SH=/bin/bash INSTALL=/usr/bin/install
 
-BUILD DESIGN
-============
+# BUILD PRINCIPLES
 
-`dma` does not use a configuration infrastructure for building (e.g. autoconf).  Largely because it is not required but also out of principle.  Design principle here is to use a simple heirarchy of Makefiles.  All definitions will be in the main [Makefile] which will then patch and call itself.
+`dma` does not use a configuration infrastructure for building (e.g. autoconf).  Largely because it is not required but also out of principle.  It's also been reworked from a split build infrastructure to try and re-sync on the basis that managing the differences can be done better with branching that it can with conditionals.
 
-[Makefile] is structured specifically to make patches most discernable; firstly everything is one definition per line.  Definitions are grouped by block (sequential lines broken by empty lines).  These blocks are sorted alphabetically.  These conventions should be maintained.
+To this end, we keep a master [Makefile] with necessary definitions.  The intent is that we can then branch that [Makefile] and integrate patches into unified releases branches.
+
+The [Makefile] itself is structured to make patches as clear as possible; firstly everything is one definition per line.  Definitions are grouped by block (sequential lines broken by empty lines).  These blocks are sorted alphabetically.  These conventions should be maintained.
 
 [Makefile]: Makefile The master makefile
 

@@ -34,44 +34,82 @@
  * SUCH DAMAGE.
  */
 
-#include "dfcompat.h"
-
-#include <sys/param.h>
-#include <sys/queue.h>
-#include <sys/stat.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
 #include <arpa/inet.h>
-
-#include <openssl/ssl.h>
-#include <openssl/err.h>
-
+#include <arpa/nameser.h>
 #include <ctype.h>
 #include <err.h>
 #include <errno.h>
 #include <netdb.h>
+#include <netinet/in.h>
+#include <openssl/err.h>
+#include <openssl/err.h>
+#include <openssl/md5.h>
+#include <openssl/pem.h>
+#include <openssl/rand.h>
+#include <openssl/ssl.h>
+#include <openssl/ssl.h>
+#include <openssl/x509.h>
+#include <resolv.h>
 #include <setjmp.h>
 #include <signal.h>
+#include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/param.h>
+#include <sys/queue.h>
+#include <sys/socket.h>
+#include <sys/stat.h>
 #include <syslog.h>
 #include <unistd.h>
 
-#include "dma.h"
+#include "net.h"
+#include "conf.h"
+
+struct
+mx_hostentry
+{
+	char host[MAXDNAME] ;
+	char addr[INET6_ADDRSTRLEN] ;
+	int pref ;
+	struct addrinfo ai ;
+	struct sockaddr_storage sa ;
+} ;
+
+static int add_host( int, const char*, int, struct mx_hostentry**, size_t* ) ;
+
+static void close_connection( int ) ;
+
+static int deliver_to_host( struct qitem*, struct mx_hostentry* ) ;
+
+static int get_mx_list( const char*, int, struct mx_hostentry**, int ) ;
+
+static void hmac_md5( unsigned char*, int, unsigned char*, int, unsigned char* ) ;
+
+static int init_cert_file( SSL_CTX*, const char*) ;
+
+static int open_connection( struct mx_hostentry* ) ;
+
+static int read_remote( int, int, char* ) ;
+
+static ssize_t send_remote_command( int, const char*, ...) ;
+
+static int smtp_auth_md5( int, char*, char* ) ;
+
+static int smtp_init_crypto( int, int ) ;
+
+static int smtp_login( int, char*, char* ) ;
+
+static int sort_pref( const void*, const void* ) ;
+
+static char* ssl_errstr() ;
 
 /* global definitions */
 char neterr[ERRMSG_SIZE];
 
-/* crypto.c defines */
-int smtp_auth_md5(int, char *, char *);
-int smtp_init_crypto(int, int);
-
 /* base64.c defines */
 int base64_encode(const void *, int, char **);
 
-/* dns.c defines */
-int dns_get_mx_list(const char *, int, struct mx_hostentry **, int);
-
-char *
+static char *
 ssl_errstr(void)
 {
 	long oerr, nerr;
@@ -83,52 +121,67 @@ ssl_errstr(void)
 	return (ERR_error_string(oerr, NULL));
 }
 
-ssize_t
-send_remote_command(int fd, const char* fmt, ...)
+int
+deliver_remote(struct qitem *it)
 {
-	va_list va;
-	char cmd[4096];
-	size_t len, pos;
-	int s;
-	ssize_t n;
+	struct mx_hostentry *hosts, *h;
+	const char *host;
+	int port;
+	int error = 1, smarthost = 0;
 
-	va_start(va, fmt);
-	s = vsnprintf(cmd, sizeof(cmd) - 2, fmt, va);
-	va_end(va);
-	if (s == sizeof(cmd) - 2 || s < 0) {
-		strcpy(neterr, "Internal error: oversized command string");
-		return (-1);
-	}
+	port = SMTP_PORT;
 
-	/* We *know* there are at least two more bytes available */
-	strcat(cmd, "\r\n");
-	len = strlen(cmd);
-
-	if (((config.features & SECURETRANS) != 0) &&
-	    ((config.features & NOSSL) == 0)) {
-		while ((s = SSL_write(config.ssl, (const char*)cmd, len)) <= 0) {
-			s = SSL_get_error(config.ssl, s);
-			if (s != SSL_ERROR_WANT_READ &&
-			    s != SSL_ERROR_WANT_WRITE) {
-				strncpy(neterr, ssl_errstr(), sizeof(neterr));
-				return (-1);
-			}
-		}
-	}
-	else {
-		pos = 0;
-		while (pos < len) {
-			n = write(fd, cmd + pos, len - pos);
-			if (n < 0)
-				return (-1);
-			pos += n;
+	/* Smarthost support? */
+	if (config.smarthost != NULL) {
+		host = config.smarthost;
+		port = config.port;
+		syslog(LOG_INFO, "using smarthost (%s:%i)", host, port);
+		smarthost = 1;
+	} else {
+		host = strrchr(it->addr, '@');
+		/* Should not happen */
+		if (host == NULL) {
+			snprintf(errmsg, sizeof(errmsg), "Internal error: badly formed address %s",
+				 it->addr);
+			return(-1);
+		} else {
+			/* Step over the @ */
+			host++;
 		}
 	}
 
-	return (len);
+	error = get_mx_list(host, port, &hosts, smarthost);
+	if (error) {
+		snprintf(errmsg, sizeof(errmsg), "DNS lookup failure: host %s not found", host);
+		syslog(LOG_NOTICE, "remote delivery %s: DNS lookup failure: host %s not found",
+		       error < 0 ? "failed" : "deferred",
+		       host);
+		return (error);
+	}
+
+	for (h = hosts; *h->host != 0; h++) {
+		switch (deliver_to_host(it, h)) {
+		case 0:
+			/* success */
+			error = 0;
+			goto out;
+		case 1:
+			/* temp failure */
+			error = 1;
+			break;
+		default:
+			/* perm failure */
+			error = -1;
+			goto out;
+		}
+	}
+out:
+	free(hosts);
+
+	return (error);
 }
 
-int
+static int
 read_remote(int fd, int extbufsize, char *extbuf)
 {
 	ssize_t rlen = 0;
@@ -252,6 +305,51 @@ read_remote(int fd, int extbufsize, char *extbuf)
 error:
 	do_timeout(0, 0);
 	return (-1);
+}
+
+static ssize_t
+send_remote_command(int fd, const char* fmt, ...)
+{
+	va_list va;
+	char cmd[4096];
+	size_t len, pos;
+	int s;
+	ssize_t n;
+
+	va_start(va, fmt);
+	s = vsnprintf(cmd, sizeof(cmd) - 2, fmt, va);
+	va_end(va);
+	if (s == sizeof(cmd) - 2 || s < 0) {
+		strcpy(neterr, "Internal error: oversized command string");
+		return (-1);
+	}
+
+	/* We *know* there are at least two more bytes available */
+	strcat(cmd, "\r\n");
+	len = strlen(cmd);
+
+	if (((config.features & SECURETRANS) != 0) &&
+	    ((config.features & NOSSL) == 0)) {
+		while ((s = SSL_write(config.ssl, (const char*)cmd, len)) <= 0) {
+			s = SSL_get_error(config.ssl, s);
+			if (s != SSL_ERROR_WANT_READ &&
+			    s != SSL_ERROR_WANT_WRITE) {
+				strncpy(neterr, ssl_errstr(), sizeof(neterr));
+				return (-1);
+			}
+		}
+	}
+	else {
+		pos = 0;
+		while (pos < len) {
+			n = write(fd, cmd + pos, len - pos);
+			if (n < 0)
+				return (-1);
+			pos += n;
+		}
+	}
+
+	return (len);
 }
 
 /*
@@ -414,7 +512,7 @@ deliver_to_host(struct qitem *it, struct mx_hostentry *host)
 
 	/* XXX allow HELO fallback */
 	/* XXX record ESMTP keywords */
-	send_remote_command(fd, "EHLO %s", hostname());
+	send_remote_command(fd, "EHLO %s", mailname());
 	READ_REMOTE_CHECK("EHLO", 2);
 
 	/*
@@ -500,66 +598,508 @@ out:
 	return (error);
 }
 
-int
-deliver_remote(struct qitem *it)
+static int
+sort_pref(const void *a, const void *b)
 {
-	struct mx_hostentry *hosts, *h;
-	const char *host;
-	int port;
-	int error = 1, smarthost = 0;
+	const struct mx_hostentry *ha = a, *hb = b;
+	int v;
 
-	port = SMTP_PORT;
+	/* sort increasing by preference primarily */
+	v = ha->pref - hb->pref;
+	if (v != 0)
+		return (v);
 
-	/* Smarthost support? */
-	if (config.smarthost != NULL) {
-		host = config.smarthost;
-		port = config.port;
-		syslog(LOG_INFO, "using smarthost (%s:%i)", host, port);
-		smarthost = 1;
-	} else {
-		host = strrchr(it->addr, '@');
-		/* Should not happen */
-		if (host == NULL) {
-			snprintf(errmsg, sizeof(errmsg), "Internal error: badly formed address %s",
-				 it->addr);
-			return(-1);
-		} else {
-			/* Step over the @ */
-			host++;
+	/* sort PF_INET6 before PF_INET */
+	v = - (ha->ai.ai_family - hb->ai.ai_family);
+	return (v);
+}
+
+static int
+add_host(int pref, const char *host, int port, struct mx_hostentry **he, size_t *ps)
+{
+	struct addrinfo hints, *res, *res0 = NULL;
+	char servname[10];
+	struct mx_hostentry *p;
+	const int count_inc = 10;
+
+	memset(&hints, 0, sizeof(hints));
+	hints.ai_family = PF_UNSPEC;
+	hints.ai_socktype = SOCK_STREAM;
+	hints.ai_protocol = IPPROTO_TCP;
+
+	snprintf(servname, sizeof(servname), "%d", port);
+	switch (getaddrinfo(host, servname, &hints, &res0)) {
+	case 0:
+		break;
+	case EAI_AGAIN:
+	case EAI_NONAME:
+		/*
+		 * EAI_NONAME gets returned for:
+		 * SMARTHOST set but DNS server not reachable -> defer
+		 * SMARTHOST set but DNS server returns "host does not exist"
+		 *           -> buggy configuration
+		 *           -> either defer or bounce would be ok -> defer
+		 * MX entry was returned by DNS server but name doesn't resolve
+		 *           -> hopefully transient situation -> defer
+		 * all other DNS problems should have been caught earlier
+		 * in get_mx_list().
+		 */
+		goto out;
+	default:
+		return(-1);
+	}
+
+	for (res = res0; res != NULL; res = res->ai_next) {
+		if (*ps + 1 >= roundup(*ps, count_inc)) {
+			size_t newsz = roundup(*ps + 2, count_inc);
+			*he = reallocf(*he, newsz * sizeof(**he));
+			if (*he == NULL)
+				goto out;
 		}
-	}
 
-	error = dns_get_mx_list(host, port, &hosts, smarthost);
-	if (error) {
-		snprintf(errmsg, sizeof(errmsg), "DNS lookup failure: host %s not found", host);
-		syslog(LOG_NOTICE, "remote delivery %s: DNS lookup failure: host %s not found",
-		       error < 0 ? "failed" : "deferred",
-		       host);
-		return (error);
-	}
+		p = &(*he)[*ps];
+		strlcpy(p->host, host, sizeof(p->host));
+		p->pref = pref;
+		p->ai = *res;
+		p->ai.ai_addr = NULL;
+		bcopy(res->ai_addr, &p->sa, p->ai.ai_addrlen);
 
-	for (h = hosts; *h->host != 0; h++) {
-		switch (deliver_to_host(it, h)) {
-		case 0:
-			/* success */
-			error = 0;
-			goto out;
-		case 1:
-			/* temp failure */
-			error = 1;
-			break;
-		default:
-			/* perm failure */
-			error = -1;
-			goto out;
-		}
+		getnameinfo((struct sockaddr *)&p->sa, p->ai.ai_addrlen,
+			    p->addr, sizeof(p->addr),
+			    NULL, 0, NI_NUMERICHOST);
+
+		(*ps)++;
 	}
+	freeaddrinfo(res0);
+
+	return (0);
+
 out:
-	free(hosts);
+	if (res0 != NULL)
+		freeaddrinfo(res0);
+	return (1);
+}
 
-	return (error);
+static int
+get_mx_list(const char *host, int port, struct mx_hostentry **he, int no_mx)
+{
+	char outname[MAXDNAME];
+	ns_msg msg;
+	ns_rr rr;
+	const char *searchhost;
+	const unsigned char *cp;
+	unsigned char *ans;
+	struct mx_hostentry *hosts = NULL;
+	size_t nhosts = 0;
+	size_t anssz;
+	int pref;
+	int cname_recurse;
+	int have_mx = 0;
+	int err;
+	int i;
+
+	res_init();
+	searchhost = host;
+	cname_recurse = 0;
+
+	anssz = 65536;
+	ans = malloc(anssz);
+	if (ans == NULL)
+		return (1);
+
+	if (no_mx)
+		goto out;
+
+repeat:
+	err = res_search(searchhost, ns_c_in, ns_t_mx, ans, anssz);
+	if (err < 0) {
+		switch (h_errno) {
+		case NO_DATA:
+			/*
+			 * Host exists, but no MX (or CNAME) entry.
+			 * Not an error, use host name instead.
+			 */
+			goto out;
+		case TRY_AGAIN:
+			/* transient error */
+			goto transerr;
+		case NO_RECOVERY:
+		case HOST_NOT_FOUND:
+		default:
+			errno = ENOENT;
+			goto err;
+		}
+	}
+
+	if (!ns_initparse(ans, anssz, &msg))
+		goto transerr;
+
+	switch (ns_msg_getflag(msg, ns_f_rcode)) {
+	case ns_r_noerror:
+		break;
+	case ns_r_nxdomain:
+		goto err;
+	default:
+		goto transerr;
+	}
+
+	for (i = 0; i < ns_msg_count(msg, ns_s_an); i++) {
+		if (ns_parserr(&msg, ns_s_an, i, &rr))
+			goto transerr;
+
+		cp = ns_rr_rdata(rr);
+
+		switch (ns_rr_type(rr)) {
+		case ns_t_mx:
+			have_mx = 1;
+			pref = ns_get16(cp);
+			cp += 2;
+			err = ns_name_uncompress(ns_msg_base(msg), ns_msg_end(msg),
+						 cp, outname, sizeof(outname));
+			if (err < 0)
+				goto transerr;
+
+			err = add_host(pref, outname, port, &hosts, &nhosts);
+			if (err == -1)
+				goto err;
+			break;
+
+		case ns_t_cname:
+			err = ns_name_uncompress(ns_msg_base(msg), ns_msg_end(msg),
+						 cp, outname, sizeof(outname));
+			if (err < 0)
+				goto transerr;
+
+			/* Prevent a CNAME loop */
+			if (cname_recurse++ > 10)
+				goto err;
+
+			searchhost = outname;
+			goto repeat;
+
+		default:
+			break;
+		}
+	}
+
+out:
+	err = 0;
+	if (0) {
+transerr:
+		if (nhosts == 0)
+			err = 1;
+	}
+	if (0) {
+err:
+		err = -1;
+	}
+
+	free(ans);
+
+	if (err == 0) {
+		if (!have_mx) {
+			/*
+			 * If we didn't find any MX, use the hostname instead.
+			 */
+			err = add_host(0, host, port, &hosts, &nhosts);
+		} else if (nhosts == 0) {
+			/*
+			 * We did get MX, but couldn't resolve any of them
+			 * due to transient errors.
+			 */
+			err = 1;
+		}
+	}
+
+	if (nhosts > 0) {
+		qsort(hosts, nhosts, sizeof(*hosts), sort_pref);
+		/* terminate list */
+		*hosts[nhosts].host = 0;
+	} else {
+		if (hosts != NULL)
+			free(hosts);
+		hosts = NULL;
+	}
+
+	*he = hosts;
+	return (err);
+
+	free(ans);
+	if (hosts != NULL)
+		free(hosts);
+	return (err);
+}
+
+static int
+init_cert_file(SSL_CTX *ctx, const char *path)
+{
+	int error;
+
+	/* Load certificate into ctx */
+	error = SSL_CTX_use_certificate_chain_file(ctx, path);
+	if (error < 1) {
+		syslog(LOG_ERR, "SSL: Cannot load certificate `%s': %s", path, ssl_errstr());
+		return (-1);
+	}
+
+	/* Add private key to ctx */
+	error = SSL_CTX_use_PrivateKey_file(ctx, path, SSL_FILETYPE_PEM);
+	if (error < 1) {
+		syslog(LOG_ERR, "SSL: Cannot load private key `%s': %s", path, ssl_errstr());
+		return (-1);
+	}
+
+	/*
+	 * Check the consistency of a private key with the corresponding
+         * certificate
+	 */
+	error = SSL_CTX_check_private_key(ctx);
+	if (error < 1) {
+		syslog(LOG_ERR, "SSL: Cannot check private key: %s", ssl_errstr());
+		return (-1);
+	}
+
+	return (0);
+}
+
+int
+smtp_init_crypto(int fd, int feature)
+{
+	SSL_CTX *ctx = NULL;
+#if (OPENSSL_VERSION_NUMBER >= 0x00909000L)
+	const SSL_METHOD *meth = NULL;
+#else
+	SSL_METHOD *meth = NULL;
+#endif
+	X509 *cert;
+	int error;
+
+	/* XXX clean up on error/close */
+	/* Init SSL library */
+	SSL_library_init();
+	SSL_load_error_strings();
+
+	meth = TLSv1_client_method();
+
+	ctx = SSL_CTX_new(meth);
+	if (ctx == NULL) {
+		syslog(LOG_WARNING, "remote delivery deferred: SSL init failed: %s", ssl_errstr());
+		return (1);
+	}
+
+	/* User supplied a certificate */
+	if (config.certfile != NULL) {
+		error = init_cert_file(ctx, config.certfile);
+		if (error) {
+			syslog(LOG_WARNING, "remote delivery deferred");
+			return (1);
+		}
+	}
+
+	/*
+	 * If the user wants STARTTLS, we have to send EHLO here
+	 */
+	if (((feature & SECURETRANS) != 0) &&
+	     (feature & STARTTLS) != 0) {
+		/* TLS init phase, disable SSL_write */
+		config.features |= NOSSL;
+
+		send_remote_command(fd, "EHLO %s", mailname());
+		if (read_remote(fd, 0, NULL) == 2) {
+			send_remote_command(fd, "STARTTLS");
+			if (read_remote(fd, 0, NULL) != 2) {
+				if ((feature & TLS_OPP) == 0) {
+					syslog(LOG_ERR, "remote delivery deferred: STARTTLS not available: %s", neterr);
+					return (1);
+				} else {
+					syslog(LOG_INFO, "in opportunistic TLS mode, STARTTLS not available: %s", neterr);
+					return (0);
+				}
+			}
+		}
+		/* End of TLS init phase, enable SSL_write/read */
+		config.features &= ~NOSSL;
+	}
+
+	config.ssl = SSL_new(ctx);
+	if (config.ssl == NULL) {
+		syslog(LOG_NOTICE, "remote delivery deferred: SSL struct creation failed: %s",
+		       ssl_errstr());
+		return (1);
+	}
+
+	/* Set ssl to work in client mode */
+	SSL_set_connect_state(config.ssl);
+
+	/* Set fd for SSL in/output */
+	error = SSL_set_fd(config.ssl, fd);
+	if (error == 0) {
+		syslog(LOG_NOTICE, "remote delivery deferred: SSL set fd failed: %s",
+		       ssl_errstr());
+		return (1);
+	}
+
+	/* Open SSL connection */
+	error = SSL_connect(config.ssl);
+	if (error < 0) {
+		syslog(LOG_ERR, "remote delivery deferred: SSL handshake failed fatally: %s",
+		       ssl_errstr());
+		return (1);
+	}
+
+	/* Get peer certificate */
+	cert = SSL_get_peer_certificate(config.ssl);
+	if (cert == NULL) {
+		syslog(LOG_WARNING, "remote delivery deferred: Peer did not provide certificate: %s",
+		       ssl_errstr());
+	}
+	X509_free(cert);
+
+	return (0);
+}
+
+/*
+ * hmac_md5() taken out of RFC 2104.  This RFC was written by H. Krawczyk,
+ * M. Bellare and R. Canetti.
+ *
+ * text      pointer to data stream
+ * text_len  length of data stream
+ * key       pointer to authentication key
+ * key_len   length of authentication key
+ * digest    caller digest to be filled int
+ */
+void
+hmac_md5(unsigned char *text, int text_len, unsigned char *key, int key_len,
+    unsigned char* digest)
+{
+        MD5_CTX context;
+        unsigned char k_ipad[65];    /* inner padding -
+                                      * key XORd with ipad
+                                      */
+        unsigned char k_opad[65];    /* outer padding -
+                                      * key XORd with opad
+                                      */
+        unsigned char tk[16];
+        int i;
+        /* if key is longer than 64 bytes reset it to key=MD5(key) */
+        if (key_len > 64) {
+
+                MD5_CTX      tctx;
+
+                MD5_Init(&tctx);
+                MD5_Update(&tctx, key, key_len);
+                MD5_Final(tk, &tctx);
+
+                key = tk;
+                key_len = 16;
+        }
+
+        /*
+         * the HMAC_MD5 transform looks like:
+         *
+         * MD5(K XOR opad, MD5(K XOR ipad, text))
+         *
+         * where K is an n byte key
+         * ipad is the byte 0x36 repeated 64 times
+	 *
+         * opad is the byte 0x5c repeated 64 times
+         * and text is the data being protected
+         */
+
+        /* start out by storing key in pads */
+        bzero( k_ipad, sizeof k_ipad);
+        bzero( k_opad, sizeof k_opad);
+        bcopy( key, k_ipad, key_len);
+        bcopy( key, k_opad, key_len);
+
+        /* XOR key with ipad and opad values */
+        for (i=0; i<64; i++) {
+                k_ipad[i] ^= 0x36;
+                k_opad[i] ^= 0x5c;
+        }
+        /*
+         * perform inner MD5
+         */
+        MD5_Init(&context);                   /* init context for 1st
+                                              * pass */
+        MD5_Update(&context, k_ipad, 64);     /* start with inner pad */
+        MD5_Update(&context, text, text_len); /* then text of datagram */
+        MD5_Final(digest, &context);          /* finish up 1st pass */
+        /*
+         * perform outer MD5
+         */
+        MD5_Init(&context);                   /* init context for 2nd
+                                              * pass */
+        MD5_Update(&context, k_opad, 64);     /* start with outer pad */
+        MD5_Update(&context, digest, 16);     /* then results of 1st
+                                              * hash */
+        MD5_Final(digest, &context);          /* finish up 2nd pass */
+}
+
+/*
+ * CRAM-MD5 authentication
+ */
+int
+smtp_auth_md5(int fd, char *login, char *password)
+{
+	unsigned char digest[BUF_SIZE];
+	char buffer[BUF_SIZE], ascii_digest[33];
+	char *temp;
+	int len, i;
+	static char hextab[] = "0123456789abcdef";
+
+	temp = calloc(BUF_SIZE, 1);
+	memset(buffer, 0, sizeof(buffer));
+	memset(digest, 0, sizeof(digest));
+	memset(ascii_digest, 0, sizeof(ascii_digest));
+
+	/* Send AUTH command according to RFC 2554 */
+	send_remote_command(fd, "AUTH CRAM-MD5");
+	if (read_remote(fd, sizeof(buffer), buffer) != 3) {
+		syslog(LOG_DEBUG, "smarthost authentication:"
+		       " AUTH cram-md5 not available: %s", neterr);
+		/* if cram-md5 is not available */
+		free(temp);
+		return (-1);
+	}
+
+	/* skip 3 char status + 1 char space */
+	base64_decode(buffer + 4, temp);
+	hmac_md5((unsigned char *)temp, strlen(temp),
+		 (unsigned char *)password, strlen(password), digest);
+	free(temp);
+
+	ascii_digest[32] = 0;
+	for (i = 0; i < 16; i++) {
+		ascii_digest[2*i] = hextab[digest[i] >> 4];
+		ascii_digest[2*i+1] = hextab[digest[i] & 15];
+	}
+
+	/* prepare answer */
+	snprintf(buffer, BUF_SIZE, "%s %s", login, ascii_digest);
+
+	/* encode answer */
+	len = base64_encode(buffer, strlen(buffer), &temp);
+	if (len < 0) {
+		syslog(LOG_ERR, "can not encode auth reply: %m");
+		return (-1);
+	}
+
+	/* send answer */
+	send_remote_command(fd, "%s", temp);
+	free(temp);
+	if (read_remote(fd, 0, NULL) != 2) {
+		syslog(LOG_WARNING, "remote delivery deferred:"
+				" AUTH cram-md5 failed: %s", neterr);
+		return (-2);
+	}
+
+	return (0);
 }
 
 /*[TODO;
-[x] start sanitizing some of the 'dma.h' definition blob
+[x] switch from 'hostname' to 'mailname'
+[x] merge 'dns.c'
+[x] strip testing block after merge
+[x] merge 'crypto.c'
 ]*/

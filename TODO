@@ -1,14 +1,15 @@
-[ ] 2009-08-28
+[ ][2009-08-28]
 		unquote/handle quoted local recipients
 
-[ ] 2009-08-28
+[ ][2009-08-28]
 		handle/use ESMTP extensions
 
-[ ] 2009-08-28
+[ ][2009-08-28]
 		.forward support
 
-[ ] 2010-10-29
+[ ][2010-10-29]
 		suggest way to run a queue flush on boot
 
-[ ] 2016-08-04
-	swap 'err/errx/et.al' for 'msg' handler
+[ ][2016-08-21]
+	[ ] libietf; rfc3986.c, rfc3986.h
+	[ ] libmsg

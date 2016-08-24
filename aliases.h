@@ -33,7 +33,7 @@ enum aliases_err {
 #define ALIASES_SUCCESS ALIASES_ERR_NONE
 #define ALIASES_GET_ERR ALIASES_ERR_NONE
 
-enum alias_type {
+enum {	/* really ALIAS_TYPE but ... huh? */
 	ALIAS_NULL,
 	ALIAS_ADDR,	/* default */
 	ALIAS_CMD,	/* [ ] */
