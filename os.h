@@ -93,6 +93,9 @@ size_t strlcpy( char*, const char*, size_t ) ;
 
 Get system configuration.
 ]*/
+enum {
+	_SC_HOST_NAME_MAX
+} ;
 long sysconf( int );
 #endif /* !HAVE_SYSCONF */
 

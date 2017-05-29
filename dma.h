@@ -49,8 +49,6 @@
 #define VERSION	"DragonFly Mail Agent " DMA_VERSION
 
 #define BUF_SIZE	2048
-#define ERRMSG_SIZE	1024
-#define USERNAME_SIZE	50
 #define MIN_RETRY	300		/* 5 minutes */
 #define MAX_RETRY	(3*60*60)	/* retry at least every 3 hours */
 #define MAX_TIMEOUT	(5*24*60*60)	/* give up after 5 days */
@@ -96,11 +94,8 @@ SLIST_HEAD(authusers, authuser);
 
 
 /* global variables */
-extern struct aliases aliases;
-extern struct config config;
 extern struct strlist tmpfs;
 extern struct authusers authusers;
-extern char username[USERNAME_SIZE];
 extern uid_t useruid;
 extern const char *logident_base;
 
@@ -108,7 +103,6 @@ extern char neterr[ERRMSG_SIZE];
 extern char errmsg[ERRMSG_SIZE];
 
 /* conf.c */
-void trim_line(char *);
 void parse_conf(const char *);
 void parse_authfile(const char *);
 
@@ -141,11 +135,10 @@ void bounce(struct qitem *, const char *);
 int readmail(struct queue *, int, int);
 
 /* util.c */
-const char *hostname(void);
+void trim_line(char *);
 void setlogident(const char *, ...) __attribute__((__format__ (__printf__, 1, 2)));
 void errlog(int, const char *, ...) __attribute__((__format__ (__printf__, 2, 3)));
 void errlogx(int, const char *, ...) __attribute__((__format__ (__printf__, 2, 3)));
-void set_username(void);
 void deltmp(void);
 int do_timeout(int, int);
 int open_locked(const char *, int, ...);

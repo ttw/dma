@@ -275,6 +275,30 @@ init_random(void)
 		close(rf);
 }
 
+/*
+ * Remove trailing \n's
+ */
+void
+trim_line(char *line)
+{
+	size_t linelen;
+	char *p;
+
+	if ((p = strchr(line, '\n')))
+		*p = (char)0;
+
+	/* Escape leading dot in every case */
+	linelen = strlen(line);
+	if (line[0] == '.') {
+		if ((linelen + 2) > 1000) {
+			syslog(LOG_CRIT, "Cannot escape leading dot.  Buffer overflow");
+			exit(EX_DATAERR);
+		}
+		memmove((line + 1), line, (linelen + 1));
+		line[0] = '.';
+	}
+}
+
 /*[TODO;
 [ ] don't like "misc" don't like "util"; evaluate these functions
 [x] move 'hostname' to 'conf.c'

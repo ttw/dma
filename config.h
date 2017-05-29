@@ -47,12 +47,13 @@ struct config {
 	const char *cert_file ;
 	const char *mailname ;
 	const char *masquerade ;
-	int port ;	/* [ ] merge with smarthost */
+	const char *port ;	/* [ ] merge with smarthost */
 	const char *smarthost ;
 	const char *spool_dir ;
 
 	int features ;
 } ;
+
 #define FEATURE_DEFER       0x0001	/* Defer mails */
 #define FEATURE_FULLBOUNCE  0x0002	/* Bounce the full message */
 #define FEATURE_INSECURE    0x0004	/* Allow plain login w/o encryption */
@@ -63,6 +64,32 @@ struct config {
 #define FEATURE_STARTTLS    0x0080	/* StartTLS support */
 #define FEATURE_TLS_OPP     0x0100	/* Opportunistic STARTTLS */
 
-config_smarthost() ;
-config_
-const char* mailname() ;
+struct config*
+config_new( struct config* ) ;
+
+struct config*
+config_parse( struct config*, const char* ) ;
+
+int
+config_port( struct config* ) ;
+
+const char*
+config_mailname( struct config* ) ;
+
+struct aliases*
+config_aliases( struct config* ) ;
+
+struct auth*
+config_auth( struct config* ) ;
+
+struct certificate
+config_certificate( struct config* ) ;
+
+struct masquerade
+config_masquerade( struct config* ) ;
+
+struct smarthost
+config_smarthost( struct config* ) ;
+
+struct spool_dir
+config_spool_dir( struct config* ) ;

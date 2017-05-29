@@ -45,12 +45,14 @@ fails for some reason.
 #	endif
 #endif
 
+#include "../os.h"
+
 long
 sysconf( int name )
 {
-	case( name )
+	switch( name )
 	{
-	_SC_HOST_NAME_MAX:
+	case _SC_HOST_NAME_MAX:
 		return( HOST_NAME_MAX ) ;
 	} ;
 	errno = EINVAL ;

@@ -10,7 +10,7 @@ static int _aliases_err = 0 ;
 
 #define ALIASES_ERR(x) do { aliases_err(x) ; return(NULL) ; } while(0)
 
-int
+static int
 aliases_err( int e )
 {
 	if( e )
@@ -72,7 +72,7 @@ alias_list_new( struct alias_list *alias_list )
 		alias_list = malloc(sizeof(struct alias_list)) ;
 		if(alias_list == NULL) ALIASES_ERR(ENOMEM) ;
 	} ;
-	SLIST_INIT( alias_list ) ;
+	alias_list = SLIST_HEAD_INITIALIZER(alias_list) ;
 	return( alias_list ) ;
 } ;
 
@@ -84,6 +84,6 @@ aliases_list_new( struct aliases_list *aliases_list )
 		aliases_list = malloc(sizeof(struct aliases_list)) ;
 		if(aliases_list == NULL) ALIASES_ERR(ENOMEM) ;
 	} ;
-	SLIST_INIT( aliases_list ) ;
+	aliases_list = SLIST_HEAD_INITIALIZER(aliases_list) ;
 	return( aliases_list ) ;
 } ;

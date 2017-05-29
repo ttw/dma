@@ -55,27 +55,10 @@
 #include <syslog.h>
 #include <unistd.h>
 
-#include "aliases/dma.h"
+#include "aliases.h"
 #include "dma.h"
 #include "conf.h"
 #include "net.h"
-
-int yyparse( void ) ;	/* parser prototype from 'aliases/parse.c' */
-
-static void deliver(struct qitem *);
-
-FILE *yyin ;	/* parser input for 'aliases/*' */
-
-struct aliases aliases = LIST_HEAD_INITIALIZER(aliases);
-struct strlist tmpfs = SLIST_HEAD_INITIALIZER(tmpfs);
-struct authusers authusers = LIST_HEAD_INITIALIZER(authusers);
-char username[USERNAME_SIZE];
-uid_t useruid;
-const char *logident_base;
-char errmsg[ERRMSG_SIZE];
-
-static int daemonize = 1;
-static int doqueue = 0;
 
 char _os_progname[PATH_MAX] = {0} ;
 
@@ -401,16 +384,152 @@ show_queue(struct queue *queue)
 }
 
 /*
- * TODO:
- *
- * - alias processing
- * - use group permissions
- * - proper sysexit codes
- */
+sendmail options
+	-Ac	=> ignore
+	-Am	=> ignore
+
+	-bp	=> mailq mode
+	-bP	=> print queue length
+	-bm	=> normal delivery
+	-bi	=> ignore
+
+	-bs	=> [?] implement this
+	-*	=> abort
+
+	-d*.*	=> foreground / debugging; level ignored
+				[ ] approx. map to 'dma' debugging levels
+
+	-F	=> fullname
+	-f	=> name
+
+	-i	=> ignore dots
+
+	-OIgnoreDots	=> same as '-i'
+	-oi		=> same as '-i'
+	-O*		=> abort
+	-o*		=> abort
+
+	-q[arg]		=> queue run (wait 'arg' time)
+
+	-r:name	=> same as '-f'
+
+	-t	=> recipients from message
+*/
+
+enum DMA_MODE
+{
+	DMA_MODE_MAIL,
+	DMA_MODE_QUEUE,
+	DMA_MODE_MAX
+} ;
+
+enum DMA_MODE_MAIL_OPTS
+{
+	DMA_MAIL_DELIVER,	/* default */
+	DMA_MAIL_DEFERRED,	/* FEATURE_DEFER */
+	DMA_MAIL_DELIVER_REMOTE,	/* FEATURE_NULLCLIENT */
+	DMA_MODE_MAIL_OPTS_MAX
+} ;
+
+enum DMA_MODE_QUEUE_OPTS
+{
+	DMA_QUEUE_RUN,
+	DMA_QUEUE_PRINT,
+	DMA_QUEUE_COUNT,
+	DMA_MODE_QUEUE_OPTS_MAX
+} ;
+
+enum DMA_FEATURE
+{
+	DMA_MAIL_BOUNCE_MSG	/* FEATURE_FULLBOUNCE */
+	DMA_MASQUERADE
+} ;
+
+enum DMA_TRANSPORT
+{
+	DMA_TRANSPORT_AUTH,
+	DMA_TRANSPORT_ENC,
+	DMA_TRANSPORT_MAX
+} ;
+
+enum DMA_TRANSPORT_AUTH_OPT
+{
+	DMA_TRANSPORT_AUTH_MD5,	/* FEATURE_SECURE */
+	DMA_TRANSPORT_AUTH_PLAIN,	/* FEATURE_INSECURE */
+} ;
+
+enum DMA_TRANSPORT_ENC_OPT
+{
+	DMA_TRANSPORT_ENC_NONE,	/* default */
+	DMA_TRANSPORT_ENC_SSL,	/* FEATURE_SECURETRANS */
+	DMA_TRANSPORT_ENC_TLS, /* FEATURE_STARTTLS */
+	DMA_TRANSPORT_ENC_TLS_OPT /* FEATURE_TLS_OPP */
+} ;
+
+struct dma
+{
+	int mode[DMA_MODE_MAX] ;	/* see DMA_MODE */
+	int debug ;	/* > 0 = foreground */
+	char *ident ;	/* for 'syslog' */
+
+	struct aliases_list *aliases ;
+
+        const char *mailname ;
+        const char *masquerade ;
+
+        const char *smarthost ;	/* [ ] convert to useful structure here */
+        const char *port ;	/* [ ] merge with smarthost */
+
+	const char *spool_dir ; /* [?] see todo */
+} ;
+
+/* DMA OPTIONS
+
+-d	foreground
+-D	DMA_MAIL_DEFERRED
+
+-f from
+-i
+-l ident
+
+-n	DMA_QUEUE_COUNT
+-p	DMA_QUEUE_PRINT
+-q	DMA_QUEUE_RUN
+
+-t	
+-v	verbosity
+
+*/
+
+enum DMA_MAIL_OPTS
+{
+	DMA_MAIL_OPT_RECP_FROM_MSG,	/* -t */
+	DMA_MAIL_OPT_MSG_FROM_FILE,	/* -i */
+	DMA_MAIL_OPT_MAX
+} ;
+
+struct dma_addr
+{
+	char *_addr ;	/* string base (free'd if changed) */
+	char *local ;	/* '-f' or 'EMAIL' environment */
+	char *at ;
+	char *domain ;	/* 
+	char *addr_display ;	/* '-F' */
+} ;
+
+struct dma_mail
+{
+	char *from ;	/* '-f' or 'EMAIL' and '-F' */
+	struc recp_list to ;
+	struct recp_list cc ;
+	struct recp_list bcc ;
+	int opts[DMA_MAIL_OPT_MAX] ;
+} ;
 
 int
 main(int argc, char **argv)
 {
+	struct config config ;
 	struct sigaction act;
 	char *sender = NULL;
 	struct queue queue;
@@ -628,4 +747,10 @@ skipopts:
 [x] correct EXPAND mis-define
 [x] switch from 'hostname' to 'mailname'
 [ ] use a standard 'conf' format and then create a library for it
+[ ] alias processing
+[ ] use group permissions
+[ ] proper sysexit codes
+[?] 'spooldir' as local or global
+			obviously this makes more sense as a global variable but perhaps I will hold-on to the idea that users might have their own spool queues.
+[x] change '-bq'; unnecessarily confused with sendmail like options
 ]*/
